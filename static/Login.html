@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Login - Universo Heróis</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <style>
+        body {
+            padding: 2em;
+            display: flex;
+            flex-direction: column;
+            align-items: center; /* Centraliza horizontalmente */
+            justify-content: center; /* Centraliza verticalmente */
+            min-height: 100vh; /* Ocupa a altura total da viewport */
+            background-color: #f8f9fa; /* Cor de fundo suave */
+        }
+
+        .login-container {
+            background-color: #ffffff;
+            padding: 2.5em;
+            border-radius: 0.5em;
+            box-shadow: 0 0.5em 1em rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 400px; /* Largura máxima para o formulário */
+        }
+
+        .info-box {
+            margin-top: 2em;
+            padding: 1em;
+            border: 1px solid #dee2e6;
+            border-radius: 0.25em;
+            background-color: #e9ecef;
+            font-size: 0.9em;
+            color: #495057;
+        }
+
+        .alert {
+            margin-top: 1em;
+        }
+    </style>
+</head>
+
+<body class="container">
+    <div class="login-container">
+        <h1 class="mb-4 text-center">Login</h1>
+
+        <div class="mb-3">
+            <input type="text" id="txtIdentifier" class="form-control mb-2" placeholder="Nome de usuário ou E-mail" />
+            <input type="password" id="txtPassword" class="form-control mb-2" placeholder="Senha" />
+        </div>
+
+        <div class="mb-3" id="divBotoes"></div>
+        <div id="divResposta" class="alert d-none" role="alert"></div>
+    </div>
+
+    <div class="info-box text-center">
+        <p>Exemplo de Credenciais:</p>
+        <p>Usuário: <code>teste@exemplo.com</code></p>
+        <p>Senha: <code>@Teste123</code></p>
+    </div>
+
+
+    <script type="module">
+        import ApiService from './ApiService.js';
+
+        // URL base da sua API
+        const API_BASE_URL = 'http://localhost:8080/api/v1'; // Ajuste a porta se necessário
+
+        // Instancia o ApiService sem token inicialmente
+        const api = new ApiService();
+
+        // Referências para elementos do DOM
+        const txtIdentifier = document.getElementById("txtIdentifier");
+        const txtPassword = document.getElementById("txtPassword");
+        const divBotoes = document.getElementById("divBotoes");
+        const divResposta = document.getElementById("divResposta");
+
+        /**
+         * Exibe uma mensagem de resposta (sucesso ou erro) no divResposta.
+         * @param {string} message - A mensagem a ser exibida.
+         * @param {boolean} isError - True se for uma mensagem de erro, false para sucesso.
+         */
+        function showResponseMessage(message, isError, errorDetails = null) {
+        let fullMessage = message;
+        if (isError && errorDetails) {
+            // Se houver detalhes de erro do backend (ErrorResponse)
+            if (errorDetails.message) { // Mensagem principal do ErrorResponse
+                fullMessage = errorDetails.message;
+            }
+            if (errorDetails.field) { // Campo específico que causou o erro (para validação)
+                fullMessage += ` (Campo: ${errorDetails.field})`;
+            }
+            if (errorDetails.detail) { // Detalhes adicionais do erro
+                fullMessage += ` [Detalhe: ${errorDetails.detail}]`;
+            }
+            if (errorDetails.code) { // Código de erro específico (ex: DUPLICATE_ENTRY)
+                fullMessage += ` (Código: ${errorDetails.code})`;
+            }
+        }
+
+        divResposta.textContent = fullMessage;
+        divResposta.className = `alert ${isError ? 'alert-danger' : 'alert-success'} d-block`;
+        setTimeout(() => {
+            divResposta.className = 'alert d-none';
+            divResposta.textContent = '';
+        }, 5000);
+    }
+
+        // Criação do botão de Login
+        const btnLogin = document.createElement("button");
+        btnLogin.textContent = "Login";
+        btnLogin.className = "btn btn-primary w-100"; // Largura total
+        divBotoes.appendChild(btnLogin);
+
+        btnLogin.onclick = async function() {
+        const identifier = txtIdentifier.value.trim();
+        const password = txtPassword.value.trim();
+
+        if (!identifier) {
+            showResponseMessage("Nome de usuário/E-mail é obrigatório.", true);
+            return;
+        }
+        if (!password) {
+            showResponseMessage("Senha é obrigatória.", true);
+            return;
+        }
+
+        const loginData = {
+            identifier: identifier,
+            password: password
+        };
+
+        try {
+            const response = await api.post(`${API_BASE_URL}/auth/login`, loginData);
+            console.log("Resposta da API de Login:", response);
+
+            if (response.success) {
+                showResponseMessage("Login efetuado com sucesso!", false);
+                localStorage.setItem("userData", JSON.stringify(response.data));
+                api.token = response.data.token;
+                window.location.href = "dashboard.html";
+            } else {
+                // Aqui, response.success pode ser false se a API retornar um erro em 200 OK
+                const errorMessage = response.message || "Erro desconhecido no login.";
+                showResponseMessage(errorMessage, true, response.error);
+            }
+        } catch (error) {
+            console.error("Erro na requisição de login:", error);
+            // O erro do catch agora terá error.responseBody se for um ErrorResponse do backend
+            showResponseMessage(error.message || "Erro de comunicação com o servidor.", true, error.responseBody?.error);
+        }
+    };
+    </script>
+</body>
+
+</html>

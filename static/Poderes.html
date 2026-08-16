@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Gerenciamento de Poderes - Universo Heróis</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+  <style>
+    body {
+      padding: 2em;
+    }
+
+    table {
+      margin-top: 1em;
+    }
+
+    /* Estilo para responsividade dos botões */
+    .d-flex.gap-2 {
+      flex-wrap: wrap;
+    }
+  </style>
+</head>
+
+<body class="container">
+
+  <h1 class="mb-4">Gerenciamento de Poderes</h1>
+
+  <!-- =========================== SEÇÃO DE FILTRO =========================== -->
+  <div class="card mb-3">
+    <div class="card-header">
+      Filtro de Poder
+    </div>
+    <div class="card-body">
+      <label for="txtFiltroPoder" class="form-label">Nome ou Descrição do Poder</label>
+      <input type="text" id="txtFiltroPoder" class="form-control" placeholder="Digite o nome ou descrição do poder">
+    </div>
+  </div>
+
+  <!-- =========================== SEÇÃO DE CADASTRO =========================== -->
+  <div class="card mb-3">
+    <div class="card-header">
+      Cadastro de Poder
+    </div>
+
+    <div class="card-body">
+      <div class="mb-3">
+        <input type="number" id="txtIdPoder" class="form-control mb-2" disabled
+          placeholder="ID (para update ou delete)" />
+        <input type="text" id="txtNomePoder" class="form-control mb-2" placeholder="Nome do Poder" />
+        <textarea id="txtDescricaoPoder" class="form-control mb-2" rows="3" placeholder="Descrição do Poder"></textarea>
+      </div>
+
+      <div class="mb-3 d-flex gap-2" id="divBotoes"></div>
+      <div id="divResposta" class="alert d-none" role="alert"></div>
+    </div>
+  </div>
+
+  <!-- =========================== SEÇÃO DE LISTAGEM =========================== -->
+  <div class="card mt-4">
+    <div class="card-header">
+      Lista de Poderes
+    </div>
+    <div class="card-body">
+      <div id="divTabela"></div>
+    </div>
+  </div>
+
+  <!-- Modal de confirmação -->
+  <div class="modal fade" id="modalConfirm" tabindex="-1" aria-labelledby="modalConfirmLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalConfirmLabel">Confirmar Exclusão</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body">
+          Tem certeza que deseja excluir este poder?
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-danger" id="btnConfirmDelete">Excluir</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================== SCRIPT PRINCIPAL =========================== -->
+  <script type="module">
+    import ApiService from './ApiService.js';
+
+    const API_BASE_URL = 'http://localhost:8080/api/v1';
+
+    let userData = localStorage.getItem("userData");
+    let token = null;
+
+    if (userData) {
+      userData = JSON.parse(userData);
+      token = userData.token;
+      console.log("Token carregado:", token ? "Sim" : "Não");
+    } else {
+      console.warn("Nenhum dado de usuário encontrado no localStorage. Redirecionando para login.");
+      window.location.href = "login.html";
+    }
+
+    const api = new ApiService(token);
+
+    let API_DATA;
+
+    const txtIdPoder = document.getElementById("txtIdPoder");
+    const txtNomePoder = document.getElementById("txtNomePoder");
+    const txtDescricaoPoder = document.getElementById("txtDescricaoPoder"); // Nova referência para a descrição
+    const divBotoes = document.getElementById("divBotoes");
+    const divResposta = document.getElementById("divResposta");
+    const txtFiltroPoder = document.getElementById("txtFiltroPoder");
+
+    function createButton(text, className) {
+      const btn = document.createElement("button");
+      btn.textContent = text;
+      btn.className = `btn ${className} flex-fill`;
+      return btn;
+    }
+
+    function showResponseMessage(message, isError, errorDetails = null) {
+        let fullMessage = message;
+        if (isError && errorDetails) {
+            // Se houver detalhes de erro do backend (ErrorResponse)
+            if (errorDetails.message) { // Mensagem principal do ErrorResponse
+                fullMessage = errorDetails.message;
+            }
+            if (errorDetails.field) { // Campo específico que causou o erro (para validação)
+                fullMessage += ` (Campo: ${errorDetails.field})`;
+            }
+            if (errorDetails.detail) { // Detalhes adicionais do erro
+                fullMessage += ` [Detalhe: ${errorDetails.detail}]`;
+            }
+            if (errorDetails.code) { // Código de erro específico (ex: DUPLICATE_ENTRY)
+                fullMessage += ` (Código: ${errorDetails.code})`;
+            }
+        }
+
+        divResposta.textContent = fullMessage;
+        divResposta.className = `alert ${isError ? 'alert-danger' : 'alert-success'} d-block`;
+        setTimeout(() => {
+            divResposta.className = 'alert d-none';
+            divResposta.textContent = '';
+        }, 5000);
+    }
+
+    // ---------- BOTÃO LISTAR ----------
+    const btnListar = createButton("Listar", "btn-primary");
+    btnListar.onclick = async function btnListar_click() {
+      listAll();
+    };
+    divBotoes.appendChild(btnListar);
+
+    // ---------- BOTÃO CRIAR ----------
+    const btnCriar = createButton("Criar", "btn-success");
+    btnCriar.onclick = async function btnCriar_click() {
+      if (txtNomePoder.value.trim() === "") {
+        showResponseMessage("Nome do poder é obrigatório.", true);
+        return;
+      }
+
+      const objetoCriar = {
+        "poder": {
+          "nomePoder": txtNomePoder.value.trim(),
+          "descricao": txtDescricaoPoder.value.trim()
+        }
+      };
+
+      try {
+        const response = await api.post(`${API_BASE_URL}/poderes`, objetoCriar);
+        if (response.success) {
+          showResponseMessage("Poder criado com sucesso!", false);
+          txtNomePoder.value = "";
+          txtDescricaoPoder.value = "";
+          listAll();
+        } else {
+          // Aqui, response.success pode ser false se a API retornar um erro em 200 OK
+          showResponseMessage(response.message || "Erro ao criar poder.", true, response.error);
+        }
+      } catch (error) {
+        console.error("Erro ao criar poder:", error);
+        // O erro do catch agora terá error.responseBody se for um ErrorResponse do backend
+        showResponseMessage(error.message || "Erro de comunicação com o servidor.", true, error.responseBody?.error);
+      }
+    };
+    divBotoes.appendChild(btnCriar);
+
+    // ---------- BOTÃO ATUALIZAR ----------
+    const btnAtualizar = createButton("Atualizar", "btn-warning");
+    btnAtualizar.onclick = async function btnAtualizar_click() {
+      const id = txtIdPoder.value.trim();
+      if (!id) {
+        showResponseMessage("Selecione um poder para atualizar.", true);
+        return;
+      }
+      if (txtNomePoder.value.trim() === "") {
+        showResponseMessage("Nome do poder é obrigatório.", true);
+        return;
+      }
+
+      const objetoAtualizar = {
+        "poder": {
+          "nomePoder": txtNomePoder.value.trim(),
+          "descricao": txtDescricaoPoder.value.trim() // Incluir a descrição
+        }
+      };
+
+      try {
+        const response = await api.put(`${API_BASE_URL}/poderes`, id, objetoAtualizar);
+        if (response.success) {
+          showResponseMessage("Poder atualizado com sucesso!", false);
+          txtNomePoder.value = "";
+          txtDescricaoPoder.value = ""; // Limpa a descrição
+          txtIdPoder.value = "";
+          listAll();
+        } else {
+          showResponseMessage(response.message || "Erro ao atualizar poder.", true);
+        }
+      } catch (error) {
+        console.error("Erro ao atualizar poder:", error);
+        showResponseMessage("Erro de comunicação com o servidor.", true);
+      }
+    };
+    divBotoes.appendChild(btnAtualizar);
+
+     // ---------- BOTÃO EXCLUIR ----------
+    const btnExcluir = createButton("Excluir", "btn-danger");
+    btnExcluir.onclick = function () {
+      const id = txtIdPoder.value.trim();
+      if (!id) {
+        showResponseMessage("Selecione um poder para excluir.", true);
+        return;
+      }
+
+      const modalConfirm = new bootstrap.Modal(document.getElementById('modalConfirm'));
+      modalConfirm.show();
+
+      const btnConfirmDelete = document.getElementById("btnConfirmDelete");
+      btnConfirmDelete.onclick = async function () {
+        try {
+          const response = await api.delete(`${API_BASE_URL}/poderes`, id);
+          
+          // Agora, 'response' sempre terá a propriedade 'success' se o delete for concluído.
+          if (response && response.success) { // Verifica se response não é null e se success é true
+            showResponseMessage(`Poder ID ${id} excluído com sucesso.`, false);
+            txtIdPoder.value = "";
+            txtNomePoder.value = "";
+            txtDescricaoPoder.value = "";
+            listAll();
+          } else {
+            // Se 'response.success' for false (erro da API) ou 'response' for null (erro de rede/apiService)
+            showResponseMessage(response?.message || "Erro ao excluir poder ou resposta inesperada.", true);
+          }
+        } catch (error) {
+          console.error("Erro ao excluir poder:", error);
+          showResponseMessage("Erro de comunicação com o servidor.", true);
+        } finally {
+          modalConfirm.hide();
+        }
+      };
+    };
+    divBotoes.appendChild(btnExcluir);
+
+    // -------------------------------------------------------------------------
+    // Função para buscar todos os poderes e exibi-los em tabela
+    // -------------------------------------------------------------------------
+    async function listAll() {
+      try {
+        const response = await api.get(`${API_BASE_URL}/poderes`);
+        if (response.success) {
+          API_DATA = response;
+          renderTable(response);
+        } else {
+          showResponseMessage(response.message || "Erro ao carregar poderes. Token inválido ou sem permissão?", true);
+        }
+      } catch (error) {
+        console.error("Erro ao listar poderes:", error);
+        showResponseMessage("Erro de comunicação com o servidor ao listar.", true);
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // Função que monta dinamicamente a tabela de poderes no DOM
+    // -------------------------------------------------------------------------
+    function renderTable(dados) {
+      const divTabela = document.getElementById("divTabela");
+      divTabela.innerHTML = "";
+
+      const table = document.createElement("table");
+      table.className = "table table-bordered table-striped";
+
+      const thead = document.createElement("thead");
+      thead.className = "table-light";
+      const trHead = document.createElement("tr");
+
+      ["ID", "Nome do Poder", "Descrição", "Ações"].forEach(text => { // Adicionado "Descrição"
+        const th = document.createElement("th");
+        th.textContent = text;
+        trHead.appendChild(th);
+      });
+
+      thead.appendChild(trHead);
+      table.appendChild(thead);
+
+      const tbody = document.createElement("tbody");
+
+      if (dados.data && Array.isArray(dados.data.poderes)) {
+        dados.data.poderes.forEach(poder => {
+          const tr = document.createElement("tr");
+
+          const tdId = document.createElement("td");
+          tdId.textContent = poder.idPoder;
+          tr.appendChild(tdId);
+
+          const tdNome = document.createElement("td");
+          tdNome.textContent = poder.nomePoder;
+          tr.appendChild(tdNome);
+
+          const tdDescricao = document.createElement("td"); // Nova coluna para descrição
+          tdDescricao.textContent = poder.descricao || "N/A"; // Exibe descrição ou "N/A"
+          tr.appendChild(tdDescricao);
+
+          const tdAcoes = document.createElement("td");
+          const divBotoesLinha = document.createElement("div");
+          divBotoesLinha.className = "d-flex gap-2";
+
+          const btnSel = createButton("Selecionar", "btn-info");
+          btnSel.onclick = function () {
+            txtIdPoder.value = poder.idPoder;
+            txtNomePoder.value = poder.nomePoder;
+            txtDescricaoPoder.value = poder.descricao || ""; // Preenche a descrição
+            divResposta.className = 'alert d-none';
+            divResposta.textContent = '';
+          };
+          divBotoesLinha.appendChild(btnSel);
+
+          tdAcoes.appendChild(divBotoesLinha);
+          tr.appendChild(tdAcoes);
+
+          tbody.appendChild(tr);
+        });
+      } else {
+        console.warn("Dados de poderes não encontrados ou em formato inesperado:", dados);
+        const trEmpty = document.createElement("tr");
+        const tdEmpty = document.createElement("td");
+        tdEmpty.setAttribute("colspan", "4"); // Ajustado para 4 colunas
+        tdEmpty.textContent = "Nenhum poder encontrado.";
+        tdEmpty.className = "text-center text-muted";
+        trEmpty.appendChild(tdEmpty);
+        tbody.appendChild(trEmpty);
+      }
+
+      table.appendChild(tbody);
+      divTabela.appendChild(table);
+    }
+
+    // -------------------------------------------------------------------------
+    // Filtro em tempo real: atualiza a tabela conforme o usuário digita
+    // -------------------------------------------------------------------------
+    txtFiltroPoder.addEventListener("input", function () {
+      const filtro = txtFiltroPoder.value.trim().toLowerCase();
+
+      if (!API_DATA || !API_DATA.data || !Array.isArray(API_DATA.data.poderes)) return;
+
+      const dadosFiltrados = {
+        data: {
+          poderes: API_DATA.data.poderes.filter(poder =>
+            // Filtra por nome OU descrição
+            poder.nomePoder.toLowerCase().includes(filtro) ||
+            (poder.descricao && poder.descricao.toLowerCase().includes(filtro))
+          )
+        },
+        success: true
+      };
+
+      renderTable(dadosFiltrados);
+      txtIdPoder.value = "";
+      txtNomePoder.value = "";
+      txtDescricaoPoder.value = ""; // Limpa descrição
+    });
+
+    // -------------------------------------------------------------------------
+    // Inicializa a aplicação listando todos os poderes ao carregar a página
+    // -------------------------------------------------------------------------
+    listAll();
+  </script>
+
+</body>
+
+</html>

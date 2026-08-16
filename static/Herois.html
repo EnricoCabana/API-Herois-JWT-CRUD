@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Gerenciamento de Heróis - Universo Heróis</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Inclui o Bootstrap (biblioteca CSS) para deixar a página mais bonita e responsiva -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+  <style>
+    body {
+      padding: 2em;
+    }
+
+    table {
+      margin-top: 1em;
+    }
+
+    /* Estilo para responsividade dos botões */
+    .d-flex.gap-2 {
+      flex-wrap: wrap;
+    }
+  </style>
+
+</head>
+
+<body class="container">
+  <!-- “container” é uma classe do Bootstrap que centraliza o conteúdo -->
+
+  <h1 class="mb-4">Gerenciamento de Heróis</h1>
+
+  <!-- ======================== FILTRO DE HERÓIS ======================== -->
+
+  <div class="card mb-3">
+    <div class="card-header">Filtro de Herói</div>
+    <div class="card-body">
+      <!-- Campo de filtro por nome do herói -->
+      <label for="txtFiltroNomeHeroi" class="form-label">Nome ou Identidade Secreta do Herói</label>
+      <input type="text" id="txtFiltroNomeHeroi" class="form-control"
+        placeholder="Digite o nome ou identidade secreta do herói">
+
+      <!-- Filtro por Poder -->
+      <label for="cboPoderesFiltro" class="form-label mt-3">Poder Principal</label>
+      <select id="cboPoderesFiltro" class="form-select mb-3">
+        <option value="-1">Selecione um poder</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- ======================== FORMULÁRIO DE CADASTRO ======================== -->
+
+  <div class="card mb-4">
+    <div class="card-header">Cadastro de Herói</div>
+    <div class="card-body">
+      <div class="mb-3">
+        <!-- Campo ID (preenchido automaticamente ao selecionar um registro da tabela) -->
+        <input type="number" id="txtIdHeroi" class="form-control mb-2" disabled
+          placeholder="ID (para update ou delete)" />
+
+        <!-- Campos de entrada de dados -->
+        <input type="text" id="txtNomeHeroi" class="form-control mb-2" placeholder="Nome do Herói" />
+        <input type="text" id="txtIdentidadeSecreta" class="form-control mb-2" placeholder="Identidade Secreta" />
+
+        <!-- Combobox para selecionar o Poder Principal -->
+        <label for="cboPoderes" class="form-label mt-1">Poder Principal</label>
+        <select id="cboPoderes" class="form-select mb-3">
+          <option value="-1">Selecione um poder</option>
+        </select>
+      </div>
+
+      <!-- Div onde os botões CRUD (Criar, Atualizar, Excluir, Listar) serão criados -->
+      <div class="mb-3 d-flex gap-2" id="divBotoes"></div>
+    </div>
+
+    <!-- Div usada para exibir mensagens de sucesso ou erro -->
+    <div id="divResposta" class="alert d-none" role="alert"></div>
+  </div>
+
+  <!-- ============================= -->
+
+  <!-- CARD: Tabela de Heróis -->
+
+  <!-- ============================= -->
+
+  <div class="card mt-4">
+    <!-- Cabeçalho do card: título que aparece no topo -->
+    <div class="card-header">
+      Lista de Heróis
+    </div>
+
+    <!-- Corpo do card, onde a tabela realmente será exibida -->
+    <div class="card-body">
+      <!-- Div onde a tabela será inserida dinamicamente via JavaScript -->
+      <!-- A função renderTable(dados) cria a tabela e insere aqui -->
+      <div id="divTabela"></div>
+    </div>
+  </div>
+  <!-- Modal de Confirmação -->
+  <div class="modal fade" id="modalConfirm" tabindex="-1" aria-labelledby="modalConfirmLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <!-- Cabeçalho do modal -->
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalConfirmLabel">Confirmação</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+
+        <!-- Corpo do modal -->
+        <div class="modal-body">
+          Tem certeza que deseja excluir este herói?
+        </div>
+
+        <!-- Rodapé do modal -->
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-danger" id="btnConfirmDelete">Excluir</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import ApiService from './ApiService.js'; // Importa uma classe auxiliar que faz as requisições HTTP
+
+    const API_BASE_URL = 'http://localhost:8080/api/v1'; // Ajuste sua URL base da API
+
+    // ======================== AUTENTICAÇÃO E CONFIGURAÇÃO INICIAL ========================
+    let userData = localStorage.getItem("userData");
+    if (userData) {
+      userData = JSON.parse(userData);
+      console.log("Usuário autenticado:", userData.user.username);
+    } else {
+      console.warn("Nenhum dado de usuário encontrado no localStorage. Redirecionando para login.");
+      window.location.href = "login.html"; // Se não estiver logado, volta para a página de login
+    }
+
+    const token = userData.token; // Pega o token JWT do usuário autenticado
+    const api = new ApiService(token); // Cria um objeto para fazer chamadas autenticadas à API
+
+    let API_DATA; // Variável global que guarda os dados dos heróis retornados pela API
+    let PODERES_DATA = []; // Variável para armazenar a lista de poderes para os dropdowns
+
+    // ======================== REFERÊNCIAS AOS ELEMENTOS HTML ========================
+    const txtIdHeroi = document.getElementById("txtIdHeroi");
+    const txtNomeHeroi = document.getElementById("txtNomeHeroi");
+    const txtIdentidadeSecreta = document.getElementById("txtIdentidadeSecreta");
+    const cboPoderes = document.getElementById("cboPoderes");
+
+    const divBotoes = document.getElementById("divBotoes");
+    const divResposta = document.getElementById("divResposta");
+
+    // Campos do filtro
+    const txtFiltroNomeHeroi = document.getElementById("txtFiltroNomeHeroi");
+    const cboPoderesFiltro = document.getElementById("cboPoderesFiltro");
+
+    // ======================== FUNÇÃO AUXILIAR PARA CRIAR BOTÕES ========================
+    function createButton(text, className) {
+      const btn = document.createElement("button");
+      btn.textContent = text;
+      btn.className = `btn ${className} flex-fill`; // Ocupa toda a largura dentro do container flex
+      return btn;
+    }
+
+    /**
+     * Exibe uma mensagem de resposta (sucesso ou erro) no divResposta.
+     * @param {string} message - A mensagem a ser exibida.
+     * @param {boolean} isError - True se for uma mensagem de erro, false para sucesso.
+     * @param {object} errorDetails - Objeto de erro da API (opcional, para mais detalhes).
+     */
+    function showResponseMessage(message, isError, errorDetails = null) {
+        let fullMessage = message;
+        if (isError && errorDetails) {
+            if (errorDetails.message) {
+                fullMessage = errorDetails.message;
+            }
+            if (errorDetails.field) {
+                fullMessage += ` (Campo: ${errorDetails.field})`;
+            }
+            if (errorDetails.detail) {
+                fullMessage += ` [Detalhe: ${errorDetails.detail}]`;
+            }
+            if (errorDetails.code) {
+                fullMessage += ` (Código: ${errorDetails.code})`;
+            }
+        }
+        divResposta.textContent = fullMessage;
+        divResposta.className = `alert ${isError ? 'alert-danger' : 'alert-success'} d-block`;
+        setTimeout(() => {
+            divResposta.className = 'alert d-none';
+            divResposta.textContent = '';
+        }, 5000);
+    }
+
+    // ======================== BOTÕES CRUD ========================
+
+    // BOTÃO LISTAR: carrega todos os heróis e renderiza a tabela
+    const btnListar = createButton("Listar", "btn-primary");
+    btnListar.onclick = listAll;
+    divBotoes.appendChild(btnListar);
+
+    // BOTÃO CRIAR: envia um novo herói para a API
+    const btnCriar = createButton("Criar", "btn-success");
+    btnCriar.onclick = async () => {
+      // Validações básicas de entrada
+      if (txtNomeHeroi.value.trim() === "") {
+        showResponseMessage("Nome do Herói é obrigatório.", true);
+        return;
+      }
+
+      // Poder pode ser nulo (ex: Batman)
+      const idPoder = cboPoderes.value === "-1" ? null : parseInt(cboPoderes.value);
+
+      // Monta o objeto que será enviado para a API
+      const objetoCriar = {
+        "heroi": {
+          "nomeHeroi": txtNomeHeroi.value.trim(),
+          "identidadeSecreta": txtIdentidadeSecreta.value.trim() || null, // Se vazio, envia null
+          "Poderes_idPoder": idPoder
+        }
+      };
+
+      try {
+        const response = await api.post(`${API_BASE_URL}/herois`, objetoCriar);
+        if (response.success) {
+          showResponseMessage("Herói criado com sucesso!", false);
+          limparFormulario();
+          listAll(); // Atualiza a tabela
+        } else {
+          showResponseMessage(response.message || "Erro ao criar herói.", true, response.error);
+        }
+      } catch (error) {
+        console.error("Erro ao criar herói:", error);
+        showResponseMessage(error.message || "Erro de comunicação com o servidor.", true, error.responseBody?.error);
+      }
+    };
+    divBotoes.appendChild(btnCriar);
+
+    // BOTÃO ATUALIZAR: altera os dados de um herói existente
+    const btnAtualizar = createButton("Atualizar", "btn-warning");
+    btnAtualizar.onclick = async () => {
+      const id = txtIdHeroi.value.trim();
+      if (!id) {
+        showResponseMessage("Selecione um herói para atualizar.", true);
+        return;
+      }
+      if (txtNomeHeroi.value.trim() === "") {
+        showResponseMessage("Nome do Herói é obrigatório.", true);
+        return;
+      }
+
+      const idPoder = cboPoderes.value === "-1" ? null : parseInt(cboPoderes.value);
+
+      const objetoAtualizar = {
+        "heroi": {
+          "nomeHeroi": txtNomeHeroi.value.trim(),
+          "identidadeSecreta": txtIdentidadeSecreta.value.trim() || null, // Se vazio, envia null
+          "Poderes_idPoder": idPoder
+        }
+      };
+
+      try {
+        const response = await api.put(`${API_BASE_URL}/herois`, id, objetoAtualizar);
+        if (response.success) {
+          showResponseMessage("Herói atualizado com sucesso!", false);
+          limparFormulario();
+          listAll(); // Atualiza tabela
+        } else {
+          showResponseMessage(response.message || "Erro ao atualizar herói.", true, response.error);
+        }
+      } catch (error) {
+        console.error("Erro ao atualizar herói:", error);
+        showResponseMessage(error.message || "Erro de comunicação com o servidor.", true, error.responseBody?.error);
+      }
+    };
+    divBotoes.appendChild(btnAtualizar);
+
+    // BOTÃO EXCLUIR: deleta um herói pelo ID informado
+    const btnExcluir = createButton("Excluir", "btn-danger");
+
+    btnExcluir.onclick = function () {
+      const id = txtIdHeroi.value.trim();
+
+      if (!id) {
+        showResponseMessage("Selecione um herói para excluir.", true);
+        return;
+      }
+
+      // Mostra o modal de confirmação
+      const modal = new bootstrap.Modal(document.getElementById('modalConfirm'));
+      modal.show();
+
+      // Botão de confirmação dentro do modal
+      const btnConfirmDelete = document.getElementById("btnConfirmDelete");
+
+      // Adiciona o evento de click apenas uma vez para o botão do modal
+      btnConfirmDelete.onclick = async function () {
+        try {
+          const response = await api.delete(`${API_BASE_URL}/herois`, id);
+          if (response && response.success) {
+            showResponseMessage(`Herói ID ${id} excluído com sucesso.`, false);
+            limparFormulario();
+            listAll(); // Atualiza tabela após exclusão
+          } else {
+            showResponseMessage(response?.message || "Erro ao excluir herói ou resposta inesperada.", true, response?.error);
+          }
+        } catch (error) {
+          console.error("Erro ao excluir herói:", error);
+          showResponseMessage("Erro de comunicação com o servidor.", true);
+        } finally {
+          modal.hide(); // Fecha o modal
+        }
+      };
+    };
+    divBotoes.appendChild(btnExcluir);
+
+    // ======================== FUNÇÕES DE SUPORTE ========================
+
+    // Busca todos os heróis na API e chama a renderização
+    async function listAll() {
+      try {
+        const response = await api.get(`${API_BASE_URL}/herois`);
+        if (response.success) {
+          API_DATA = response;
+          renderTable(filterData());
+        } else {
+          showResponseMessage(response.message || "Erro ao carregar heróis.", true, response.error);
+        }
+      } catch (error) {
+        console.error("Erro ao listar heróis:", error);
+        showResponseMessage("Erro de comunicação com o servidor ao listar heróis.", true, error.responseBody?.error);
+      }
+    }
+
+    // Limpa o formulário após uma operação
+    function limparFormulario() {
+      txtIdHeroi.value = "";
+      txtNomeHeroi.value = "";
+      txtIdentidadeSecreta.value = "";
+      cboPoderes.value = "-1";
+      divResposta.className = 'alert d-none'; // Esconde a mensagem
+      divResposta.textContent = '';
+    }
+
+    // -----------------------------------------------------------------------------
+    // Função que monta dinamicamente a tabela HTML com os dados dos heróis
+    // -----------------------------------------------------------------------------
+    function renderTable(dados) {
+      const divTabela = document.getElementById("divTabela");
+      divTabela.innerHTML = "";
+
+      const table = document.createElement("table");
+      table.className = "table table-bordered table-striped";
+
+      const thead = document.createElement("thead");
+      thead.className = "table-light";
+      const trHead = document.createElement("tr");
+
+      ["ID", "Nome do Herói", "Identidade Secreta", "Poder Principal", "Ações"].forEach(text => {
+        const th = document.createElement("th");
+        th.textContent = text;
+        trHead.appendChild(th);
+      });
+
+      thead.appendChild(trHead);
+      table.appendChild(thead);
+
+      const tbody = document.createElement("tbody");
+
+      if (dados.data && Array.isArray(dados.data.herois)) {
+        dados.data.herois.forEach(heroi => {
+          const tr = document.createElement("tr");
+
+          const tdId = document.createElement("td");
+          tdId.textContent = heroi.idHeroi;
+          tr.appendChild(tdId);
+
+          const tdNome = document.createElement("td");
+          tdNome.textContent = heroi.nomeHeroi;
+          tr.appendChild(tdNome);
+
+          const tdIdentidade = document.createElement("td");
+          tdIdentidade.textContent = heroi.identidadeSecreta || "N/A"; // Se nulo, mostra N/A
+          tr.appendChild(tdIdentidade);
+
+          const tdPoder = document.createElement("td");
+          tdPoder.textContent = heroi.poder ? heroi.poder.nomePoder : "Nenhum"; // Mostra nome do poder ou "Nenhum"
+          tr.appendChild(tdPoder);
+
+          const tdAcoes = document.createElement("td");
+          const divBotoesLinha = document.createElement("div");
+          divBotoesLinha.className = "d-flex gap-2";
+
+          const btnSel = createButton("Selecionar", "btn-info");
+          btnSel.onclick = () => {
+            txtIdHeroi.value = heroi.idHeroi;
+            txtNomeHeroi.value = heroi.nomeHeroi;
+            txtIdentidadeSecreta.value = heroi.identidadeSecreta || "";
+            cboPoderes.value = heroi.poder ? heroi.poder.idPoder : "-1"; // Seleciona o poder
+            divResposta.className = 'alert d-none';
+            divResposta.textContent = '';
+          };
+          divBotoesLinha.appendChild(btnSel);
+
+          tdAcoes.appendChild(divBotoesLinha);
+          tr.appendChild(tdAcoes);
+
+          tbody.appendChild(tr);
+        });
+      } else {
+        console.warn("Dados de heróis não encontrados ou em formato inesperado:", dados);
+        const trEmpty = document.createElement("tr");
+        const tdEmpty = document.createElement("td");
+        tdEmpty.setAttribute("colspan", "5"); // Ajustado para 5 colunas
+        tdEmpty.textContent = "Nenhum herói encontrado.";
+        tdEmpty.className = "text-center text-muted";
+        trEmpty.appendChild(tdEmpty);
+        tbody.appendChild(trEmpty);
+      }
+
+      table.appendChild(tbody);
+      divTabela.appendChild(table);
+    }
+
+
+    // Preenche os selects de poderes (cadastro e filtro)
+    async function preencherSelectPoderes() {
+      try {
+        const response = await api.get(`${API_BASE_URL}/poderes`);
+        if (response.success && response.data && Array.isArray(response.data.poderes)) {
+          PODERES_DATA = response.data.poderes; // Armazena os dados dos poderes
+
+          cboPoderes.innerHTML = '<option value="-1">Selecione um poder (Opcional)</option>';
+          cboPoderesFiltro.innerHTML = '<option value="-1">Selecione um poder (Todos)</option>';
+
+          PODERES_DATA.forEach(poder => {
+            const optionCad = document.createElement("option");
+            optionCad.value = poder.idPoder;
+            optionCad.textContent = poder.nomePoder;
+            cboPoderes.appendChild(optionCad);
+
+            const optionFiltro = document.createElement("option");
+            optionFiltro.value = poder.idPoder;
+            optionFiltro.textContent = poder.nomePoder;
+            cboPoderesFiltro.appendChild(optionFiltro);
+          });
+        } else {
+          console.error("Erro ao carregar poderes para os selects:", response.message || "Formato de dados inesperado.");
+          showResponseMessage("Erro ao carregar poderes para os selects.", true);
+        }
+      } catch (error) {
+        console.error("Erro de comunicação ao carregar poderes:", error);
+        showResponseMessage("Erro de comunicação ao carregar poderes.", true);
+      }
+    }
+
+    // ======================== FILTROS EM TEMPO REAL ========================
+    // A cada digitação ou mudança em um campo, a tabela é filtrada
+    [txtFiltroNomeHeroi, cboPoderesFiltro].forEach(el => {
+      el.addEventListener("input", () => renderTable(filterData()));
+    });
+
+
+    // -----------------------------------------------------------------------------
+    // Função que aplica os filtros de nome/identidade e poder aos heróis
+    // -----------------------------------------------------------------------------
+    function filterData() {
+      if (!API_DATA || !API_DATA.data || !API_DATA.data.herois) return API_DATA;
+
+      const termoFiltro = txtFiltroNomeHeroi.value.trim().toLowerCase();
+      const poderFiltro = parseInt(cboPoderesFiltro.value);
+
+      const dadosFiltrados = API_DATA.data.herois.filter(heroi => {
+        let match = true;
+
+        // Filtro por nome ou identidade secreta
+        if (termoFiltro) {
+          match = match && (
+            heroi.nomeHeroi.toLowerCase().includes(termoFiltro) ||
+            (heroi.identidadeSecreta && heroi.identidadeSecreta.toLowerCase().includes(termoFiltro))
+          );
+        }
+
+        // Filtro por poder principal
+        if (!isNaN(poderFiltro) && poderFiltro !== -1) {
+          match = match && heroi.poder && heroi.poder.idPoder === poderFiltro;
+        }
+
+        return match;
+      });
+
+      return {
+        data: {
+          herois: dadosFiltrados
+        }
+      };
+    }
+
+    // Ao carregar a página, faz a primeira listagem e preenche os poderes
+    async function initPage() {
+      await preencherSelectPoderes();
+      listAll();
+    }
+    initPage();
+  </script>
+
+</body>
+
+</html>

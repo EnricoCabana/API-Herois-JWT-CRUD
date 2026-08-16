@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Gerenciamento de Vilões - Universo Heróis</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+  <style>
+    body {
+      padding: 2em;
+    }
+
+    table {
+      margin-top: 1em;
+    }
+
+    .d-flex.gap-2 {
+      flex-wrap: wrap;
+    }
+  </style>
+
+</head>
+
+<body class="container">
+
+  <h1 class="mb-4">Gerenciamento de Vilões</h1>
+
+  <!-- ======================== FILTRO DE VILÕES ======================== -->
+
+  <div class="card mb-3">
+    <div class="card-header">Filtro de Vilão</div>
+    <div class="card-body">
+      <label for="txtFiltroNomeVilao" class="form-label">Nome ou Identidade Secreta do Vilão</label>
+      <input type="text" id="txtFiltroNomeVilao" class="form-control"
+        placeholder="Digite o nome ou identidade secreta do vilão">
+
+      <label for="cboPoderesFiltro" class="form-label mt-3">Poder Principal</label>
+      <select id="cboPoderesFiltro" class="form-select mb-3">
+        <option value="-1">Selecione um poder</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- ======================== FORMULÁRIO DE CADASTRO ======================== -->
+
+  <div class="card mb-4">
+    <div class="card-header">Cadastro de Vilão</div>
+    <div class="card-body">
+      <div class="mb-3">
+        <input type="number" id="txtIdVilao" class="form-control mb-2" disabled
+          placeholder="ID (para update ou delete)" />
+
+        <input type="text" id="txtNomeVilao" class="form-control mb-2" placeholder="Nome do Vilão" />
+        <input type="text" id="txtIdentidadeSecreta" class="form-control mb-2" placeholder="Identidade Secreta" />
+
+        <label for="cboPoderes" class="form-label mt-1">Poder Principal</label>
+        <select id="cboPoderes" class="form-select mb-3">
+          <option value="-1">Selecione um poder</option>
+        </select>
+      </div>
+
+      <div class="mb-3 d-flex gap-2" id="divBotoes"></div>
+    </div>
+
+    <div id="divResposta" class="alert d-none" role="alert"></div>
+  </div>
+
+  <!-- ============================= -->
+
+  <!-- CARD: Tabela de Vilões -->
+
+  <!-- ============================= -->
+
+  <div class="card mt-4">
+    <div class="card-header">
+      Lista de Vilões
+    </div>
+
+    <div class="card-body">
+      <div id="divTabela"></div>
+    </div>
+  </div>
+  <!-- Modal de Confirmação -->
+  <div class="modal fade" id="modalConfirm" tabindex="-1" aria-labelledby="modalConfirmLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalConfirmLabel">Confirmação</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+
+        <div class="modal-body">
+          Tem certeza que deseja excluir este vilão?
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-danger" id="btnConfirmDelete">Excluir</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import ApiService from './ApiService.js';
+
+    const API_BASE_URL = 'http://localhost:8080/api/v1'; // Ajuste sua URL base da API
+
+    // ======================== AUTENTICAÇÃO E CONFIGURAÇÃO INICIAL ========================
+    let userData = localStorage.getItem("userData");
+    if (userData) {
+      userData = JSON.parse(userData);
+      console.log("Usuário autenticado:", userData.user.username);
+    } else {
+      console.warn("Nenhum dado de usuário encontrado no localStorage. Redirecionando para login.");
+      window.location.href = "login.html";
+    }
+
+    const token = userData.token;
+    const api = new ApiService(token);
+
+    let API_DATA;
+    let PODERES_DATA = [];
+
+    // ======================== REFERÊNCIAS AOS ELEMENTOS HTML ========================
+    const txtIdVilao = document.getElementById("txtIdVilao");
+    const txtNomeVilao = document.getElementById("txtNomeVilao");
+    const txtIdentidadeSecreta = document.getElementById("txtIdentidadeSecreta");
+    const cboPoderes = document.getElementById("cboPoderes");
+
+    const divBotoes = document.getElementById("divBotoes");
+    const divResposta = document.getElementById("divResposta");
+
+    const txtFiltroNomeVilao = document.getElementById("txtFiltroNomeVilao");
+    const cboPoderesFiltro = document.getElementById("cboPoderesFiltro");
+
+    // ======================== FUNÇÃO AUXILIAR PARA CRIAR BOTÕES ========================
+    function createButton(text, className) {
+      const btn = document.createElement("button");
+      btn.textContent = text;
+      btn.className = `btn ${className} flex-fill`;
+      return btn;
+    }
+
+    /**
+     * Exibe uma mensagem de resposta (sucesso ou erro) no divResposta.
+     * @param {string} message - A mensagem a ser exibida.
+     * @param {boolean} isError - True se for uma mensagem de erro, false para sucesso.
+     * @param {object} errorDetails - Objeto de erro da API (opcional, para mais detalhes).
+     */
+    function showResponseMessage(message, isError, errorDetails = null) {
+      let fullMessage = message;
+      if (isError && errorDetails) {
+        if (errorDetails.message) {
+          fullMessage = errorDetails.message;
+        }
+        if (errorDetails.field) {
+          fullMessage += ` (Campo: ${errorDetails.field})`;
+        }
+        if (errorDetails.detail) {
+          fullMessage += ` [Detalhe: ${errorDetails.detail}]`;
+        }
+        if (errorDetails.code) {
+          fullMessage += ` (Código: ${errorDetails.code})`;
+        }
+      }
+      divResposta.textContent = fullMessage;
+      divResposta.className = `alert ${isError ? 'alert-danger' : 'alert-success'} d-block`;
+      setTimeout(() => {
+        divResposta.className = 'alert d-none';
+        divResposta.textContent = '';
+      }, 5000);
+    }
+
+    // ======================== BOTÕES CRUD ========================
+
+    // BOTÃO LISTAR: carrega todos os vilões e renderiza a tabela
+    const btnListar = createButton("Listar", "btn-primary");
+    btnListar.onclick = listAll;
+    divBotoes.appendChild(btnListar);
+
+    // BOTÃO CRIAR: envia um novo vilão para a API
+    const btnCriar = createButton("Criar", "btn-success");
+    btnCriar.onclick = async () => {
+      if (txtNomeVilao.value.trim() === "") {
+        showResponseMessage("Nome do Vilão é obrigatório.", true);
+        return;
+      }
+
+      const idPoder = cboPoderes.value === "-1" ? null : parseInt(cboPoderes.value);
+
+      const objetoCriar = {
+        "vilao": {
+          "nomeVilao": txtNomeVilao.value.trim(),
+          "identidadeSecreta": txtIdentidadeSecreta.value.trim() || null,
+          "Poderes_idPoder": idPoder
+        }
+      };
+
+      try {
+        const response = await api.post(`${API_BASE_URL}/viloes`, objetoCriar);
+        if (response.success) {
+          showResponseMessage("Vilão criado com sucesso!", false);
+          limparFormulario();
+          listAll();
+        } else {
+          showResponseMessage(response.message || "Erro ao criar vilão.", true, response.error);
+        }
+      } catch (error) {
+        console.error("Erro ao criar vilão:", error);
+        showResponseMessage(error.message || "Erro de comunicação com o servidor.", true, error.responseBody?.error);
+      }
+    };
+    divBotoes.appendChild(btnCriar);
+
+    // BOTÃO ATUALIZAR: altera os dados de um vilão existente
+    const btnAtualizar = createButton("Atualizar", "btn-warning");
+    btnAtualizar.onclick = async () => {
+      const id = txtIdVilao.value.trim();
+      if (!id) {
+        showResponseMessage("Selecione um vilão para atualizar.", true);
+        return;
+      }
+      if (txtNomeVilao.value.trim() === "") {
+        showResponseMessage("Nome do Vilão é obrigatório.", true);
+        return;
+      }
+
+      const idPoder = cboPoderes.value === "-1" ? null : parseInt(cboPoderes.value);
+
+      const objetoAtualizar = {
+        "vilao": {
+          "nomeVilao": txtNomeVilao.value.trim(),
+          "identidadeSecreta": txtIdentidadeSecreta.value.trim() || null,
+          "Poderes_idPoder": idPoder
+        }
+      };
+
+      try {
+        const response = await api.put(`${API_BASE_URL}/viloes`, id, objetoAtualizar);
+        if (response.success) {
+          showResponseMessage("Vilão atualizado com sucesso!", false);
+          limparFormulario();
+          listAll();
+        } else {
+          showResponseMessage(response.message || "Erro ao atualizar vilão.", true, response.error);
+        }
+      } catch (error) {
+        console.error("Erro ao atualizar vilão:", error);
+        showResponseMessage(error.message || "Erro de comunicação com o servidor.", true, error.responseBody?.error);
+      }
+    };
+    divBotoes.appendChild(btnAtualizar);
+
+    // BOTÃO EXCLUIR: deleta um vilão pelo ID informado
+    const btnExcluir = createButton("Excluir", "btn-danger");
+    btnExcluir.onclick = function () {
+      const id = txtIdVilao.value.trim();
+
+      if (!id) {
+        showResponseMessage("Selecione um vilão para excluir.", true);
+        return;
+      }
+
+      const modal = new bootstrap.Modal(document.getElementById('modalConfirm'));
+      modal.show();
+
+      const btnConfirmDelete = document.getElementById("btnConfirmDelete");
+
+      btnConfirmDelete.onclick = async function () {
+        try {
+          const response = await api.delete(`${API_BASE_URL}/viloes`, id);
+          if (response && response.success) {
+            showResponseMessage(`Vilão ID ${id} excluído com sucesso.`, false);
+            limparFormulario();
+            listAll();
+          } else {
+            showResponseMessage(response?.message || "Erro ao excluir vilão ou resposta inesperada.", true, response?.error);
+          }
+        } catch (error) {
+          console.error("Erro ao excluir vilão:", error);
+          showResponseMessage("Erro de comunicação com o servidor.", true);
+        } finally {
+          modal.hide();
+        }
+      };
+    };
+    divBotoes.appendChild(btnExcluir);
+
+    // ======================== FUNÇÕES DE SUPORTE ========================
+
+    async function listAll() {
+      try {
+        const response = await api.get(`${API_BASE_URL}/viloes`);
+        if (response.success) {
+          API_DATA = response;
+          renderTable(filterData());
+        } else {
+          showResponseMessage(response.message || "Erro ao carregar vilões.", true, response.error);
+        }
+      } catch (error) {
+        console.error("Erro ao listar vilões:", error);
+        showResponseMessage("Erro de comunicação com o servidor ao listar vilões.", true, error.responseBody?.error);
+      }
+    }
+
+    function limparFormulario() {
+      txtIdVilao.value = "";
+      txtNomeVilao.value = "";
+      txtIdentidadeSecreta.value = "";
+      cboPoderes.value = "-1";
+      divResposta.className = 'alert d-none';
+      divResposta.textContent = '';
+    }
+
+    // -----------------------------------------------------------------------------
+    // Função que monta dinamicamente a tabela HTML com os dados dos vilões
+    // -----------------------------------------------------------------------------
+    function renderTable(dados) {
+      const divTabela = document.getElementById("divTabela");
+      divTabela.innerHTML = "";
+
+      const table = document.createElement("table");
+      table.className = "table table-bordered table-striped";
+
+      const thead = document.createElement("thead");
+      thead.className = "table-light";
+      const trHead = document.createElement("tr");
+
+      ["ID", "Nome do Vilão", "Identidade Secreta", "Poder Principal", "Ações"].forEach(text => {
+        const th = document.createElement("th");
+        th.textContent = text;
+        trHead.appendChild(th);
+      });
+
+      thead.appendChild(trHead);
+      table.appendChild(thead);
+
+      const tbody = document.createElement("tbody");
+
+      // Note: A API retorna "viloes" no plural
+      if (dados.data && Array.isArray(dados.data.viloes)) {
+        dados.data.viloes.forEach(vilao => {
+          const tr = document.createElement("tr");
+
+          const tdId = document.createElement("td");
+          tdId.textContent = vilao.idVilao;
+          tr.appendChild(tdId);
+
+          const tdNome = document.createElement("td");
+          tdNome.textContent = vilao.nomeVilao;
+          tr.appendChild(tdNome);
+
+          const tdIdentidade = document.createElement("td");
+          tdIdentidade.textContent = vilao.identidadeSecreta || "N/A";
+          tr.appendChild(tdIdentidade);
+
+          const tdPoder = document.createElement("td");
+          tdPoder.textContent = vilao.poder ? vilao.poder.nomePoder : "Nenhum";
+          tr.appendChild(tdPoder);
+
+          const tdAcoes = document.createElement("td");
+          const divBotoesLinha = document.createElement("div");
+          divBotoesLinha.className = "d-flex gap-2";
+
+          const btnSel = createButton("Selecionar", "btn-info");
+          btnSel.onclick = () => {
+            txtIdVilao.value = vilao.idVilao;
+            txtNomeVilao.value = vilao.nomeVilao;
+            txtIdentidadeSecreta.value = vilao.identidadeSecreta || "";
+            cboPoderes.value = vilao.poder ? vilao.poder.idPoder : "-1";
+            divResposta.className = 'alert d-none';
+            divResposta.textContent = '';
+          };
+          divBotoesLinha.appendChild(btnSel);
+
+          tdAcoes.appendChild(divBotoesLinha);
+          tr.appendChild(tdAcoes);
+
+          tbody.appendChild(tr);
+        });
+      } else {
+        console.warn("Dados de vilões não encontrados ou em formato inesperado:", dados);
+        const trEmpty = document.createElement("tr");
+        const tdEmpty = document.createElement("td");
+        tdEmpty.setAttribute("colspan", "5");
+        tdEmpty.textContent = "Nenhum vilão encontrado.";
+        tdEmpty.className = "text-center text-muted";
+        trEmpty.appendChild(tdEmpty);
+        tbody.appendChild(trEmpty);
+      }
+
+      table.appendChild(tbody);
+      divTabela.appendChild(table);
+    }
+
+
+    // Preenche os selects de poderes (cadastro e filtro)
+    async function preencherSelectPoderes() {
+      try {
+        const response = await api.get(`${API_BASE_URL}/poderes`);
+        if (response.success && response.data && Array.isArray(response.data.poderes)) {
+          PODERES_DATA = response.data.poderes;
+
+          cboPoderes.innerHTML = '<option value="-1">Selecione um poder (Opcional)</option>';
+          cboPoderesFiltro.innerHTML = '<option value="-1">Selecione um poder (Todos)</option>';
+
+          PODERES_DATA.forEach(poder => {
+            const optionCad = document.createElement("option");
+            optionCad.value = poder.idPoder;
+            optionCad.textContent = poder.nomePoder;
+            cboPoderes.appendChild(optionCad);
+
+            const optionFiltro = document.createElement("option");
+            optionFiltro.value = poder.idPoder;
+            optionFiltro.textContent = poder.nomePoder;
+            cboPoderesFiltro.appendChild(optionFiltro);
+          });
+        } else {
+          console.error("Erro ao carregar poderes para os selects:", response.message || "Formato de dados inesperado.");
+          showResponseMessage("Erro ao carregar poderes para os selects.", true);
+        }
+      } catch (error) {
+        console.error("Erro de comunicação ao carregar poderes:", error);
+        showResponseMessage("Erro de comunicação ao carregar poderes.", true);
+      }
+    }
+
+    // ======================== FILTROS EM TEMPO REAL ========================
+    [txtFiltroNomeVilao, cboPoderesFiltro].forEach(el => {
+      el.addEventListener("input", () => renderTable(filterData()));
+    });
+
+    // -----------------------------------------------------------------------------
+    // Função que aplica os filtros de nome/identidade e poder aos vilões
+    // -----------------------------------------------------------------------------
+    function filterData() {
+      if (!API_DATA || !API_DATA.data || !API_DATA.data.viloes) return API_DATA;
+
+      const termoFiltro = txtFiltroNomeVilao.value.trim().toLowerCase();
+      const poderFiltro = parseInt(cboPoderesFiltro.value);
+
+      const dadosFiltrados = API_DATA.data.viloes.filter(vilao => {
+        let match = true;
+
+        if (termoFiltro) {
+          match = match && (
+            vilao.nomeVilao.toLowerCase().includes(termoFiltro) ||
+            (vilao.identidadeSecreta && vilao.identidadeSecreta.toLowerCase().includes(termoFiltro))
+          );
+        }
+
+        if (!isNaN(poderFiltro) && poderFiltro !== -1) {
+          match = match && vilao.poder && vilao.poder.idPoder === poderFiltro;
+        }
+
+        return match;
+      });
+
+      return {
+        data: {
+          viloes: dadosFiltrados
+        }
+      };
+    }
+
+    // Ao carregar a página, faz a primeira listagem e preenche os poderes
+    async function initPage() {
+      await preencherSelectPoderes();
+      listAll();
+    }
+    initPage();
+  </script>
+
+</body>
+
+</html>
