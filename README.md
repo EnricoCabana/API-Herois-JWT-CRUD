@@ -8,6 +8,14 @@ API REST em Node.js para gerenciamento de Heróis, Vilões e Poderes, com autent
 
 ---
 
+## Capturas de tela
+
+![Login](./screenshots/login.png)
+![Dashboard](./screenshots/dashboard.png)
+![Gerenciamento de Heróis](./screenshots/herois.png)
+![Gerenciamento de Vilões](./screenshots/viloes.png)
+![Gerenciamento de Poderes](./screenshots/poderes.png)
+
 ## Funcionalidades
 
 - Login com autenticação JWT, com token exigido em todas as rotas protegidas da API
