@@ -12,16 +12,12 @@ API REST em Node.js para gerenciamento de Heróis, Vilões e Poderes, com autent
 
 <table>
   <tr>
-    <td><img src="./screenshots/login.png" width="380" alt="Login"></td>
     <td><img src="./screenshots/dashboard.png" width="380" alt="Dashboard"></td>
-  </tr>
-  <tr>
     <td><img src="./screenshots/herois.png" width="380" alt="Gerenciamento de Heróis"></td>
-    <td><img src="./screenshots/viloes.png" width="380" alt="Gerenciamento de Vilões"></td>
   </tr>
   <tr>
+    <td><img src="./screenshots/viloes.png" width="380" alt="Gerenciamento de Vilões"></td>
     <td><img src="./screenshots/poderes.png" width="380" alt="Gerenciamento de Poderes"></td>
-    <td></td>
   </tr>
 </table>
 
