@@ -1,6 +1,6 @@
 # API Heróis JWT CRUD
 
-API REST em Node.js para gerenciamento de Heróis, Vilões e Poderes, com autenticação via JWT e interface web para login, cadastro, listagem, edição e exclusão. Desenvolvido para o 3º Bimestre da disciplina de Programação para Aplicações Web (PAW), Colégios Univap.
+API REST em Node.js para gerenciamento de Heróis, Vilões e Poderes, com autenticação via JWT e interface web para login, cadastro, listagem, edição e exclusão. Desenvolvido para o 3º Bimestre de 2025 da disciplina de Programação para Aplicações Web (PAW), Colégios Univap.
 
 ![Node.js](https://img.shields.io/badge/Node.js-Express-339933?logo=node.js&logoColor=white)
 ![JWT](https://img.shields.io/badge/Auth-JWT-000000?logo=jsonwebtokens&logoColor=white)
@@ -124,4 +124,4 @@ API_BOBA/
 
 ## Contexto acadêmico
 
-Projeto do 3º Bimestre da disciplina de Programação para Aplicações Web (PAW), Colégios Univap, desenvolvido em grupo por Enrico Cabana Nascimento, João Paulo dos Santos Felix e Igor Garcez de Oliveira.
+Projeto do 3º Bimestre de 2025 da disciplina de Programação para Aplicações Web (PAW), Colégios Univap, sob orientação do professor Hélio Esperidião. Desenvolvido em grupo por Enrico Cabana Nascimento, João Paulo dos Santos Felix e Igor Garcez de Oliveira.
